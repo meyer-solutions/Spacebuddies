@@ -60,6 +60,11 @@
     .mobile button { pointer-events:auto; touch-action:none; -webkit-user-select:none; user-select:none; border:1px solid rgba(255,255,255,.2); border-radius:16px; background:rgba(255,255,255,.06); backdrop-filter: blur(6px); padding:16px; font-size:22px; min-width:64px; min-height:64px; }
     .mobile .fire { flex:0 0 96px; min-height:96px; font-size:26px; border-color: rgba(73,208,255,.5); box-shadow: inset 0 0 24px rgba(73,208,255,.12); }
     @media (min-width: 800px) { .mobile { display:none; } }
+  
+    /* Virtual Joystick */
+    .joystick { position: relative; width: 140px; height: 140px; border-radius: 50%; }
+    .joy-base { position:absolute; inset:0; border-radius:50%; background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.18); box-shadow: inset 0 0 50px rgba(0,0,0,.25); }
+    .joy-knob { position:absolute; left:calc(50% - 24px); top:calc(50% - 24px); width:48px; height:48px; border-radius:50%; background:rgba(255,255,255,.16); border:1px solid rgba(255,255,255,.35); box-shadow:0 6px 20px rgba(0,0,0,.35); transition: transform .05s; }
   </style>
 </head>
 <body>
@@ -71,6 +76,11 @@
     <div class="right">
       <div class="pill" id="lives">❤❤❤</div>
       <div class="pill" id="net">Offline</div>
+      <button class="pill btn ghost" id="autoFireBtn" title="F">🔁 Auto‑Fire aus</button>
+      <button class="pill btn ghost" id="muteBtn" title="M">🔊 Sound an</button>
+      <button class="pill btn ghost" id="pauseBtn" title="P">⏸️ Pause</button>
+    </div>
+      <div class="pill" id="net">Offline</div>
       <button class="pill btn ghost" id="muteBtn" title="M">🔊 Sound an</button>
       <button class="pill btn ghost" id="pauseBtn" title="P">⏸️ Pause</button>
     </div>
@@ -78,9 +88,13 @@
 
   <div class="mobile" id="mobile" hidden>
     <div class="pad">
-      <button class="btn" id="btnLeft" aria-label="Links">⬅️</button>
-      <button class="btn" id="btnRight" aria-label="Rechts">➡️</button>
+      <div class="joystick" id="joy">
+        <div class="joy-base"></div>
+        <div class="joy-knob" id="joyKnob"></div>
+      </div>
     </div>
+    <button class="btn fire" id="btnFire" aria-label="Feuer">🔥</button>
+  </div>
     <button class="btn fire" id="btnFire" aria-label="Feuer">🔥</button>
   </div>
 
@@ -244,6 +258,7 @@
     net: document.getElementById('net'),
     muteBtn: document.getElementById('muteBtn'),
     pauseBtn: document.getElementById('pauseBtn'),
+    autoFireBtn: document.getElementById('autoFireBtn'),
   };
 
   const menu = document.getElementById('menu');
@@ -257,15 +272,16 @@
   const rtcStatus = document.getElementById('rtcStatus');
 
   const keys = new Set();
-  window.addEventListener('keydown', (e) => { if (["ArrowLeft","ArrowRight"," ","KeyA","KeyD","KeyM","KeyP"].includes(e.code)) e.preventDefault(); keys.add(e.code); if(e.code==='KeyM') toggleMute(); if(e.code==='KeyP') togglePause(); });
+  window.addEventListener('keydown', (e) => { if (["ArrowLeft","ArrowRight"," ","KeyA","KeyD","KeyM","KeyP","KeyF"].includes(e.code)) e.preventDefault(); keys.add(e.code); if(e.code==='KeyM') toggleMute(); if(e.code==='KeyP') togglePause(); if(e.code==='KeyF') toggleAutoFire(); });
   window.addEventListener('keyup', (e) => keys.delete(e.code));
 
   // ======= Mobile / Touch Controls =======
   const isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints>0);
   const mobile = document.getElementById('mobile');
-  const btnL = document.getElementById('btnLeft');
-  const btnR = document.getElementById('btnRight');
   const btnF = document.getElementById('btnFire');
+  const joy = document.getElementById('joy');
+  const joyKnob = document.getElementById('joyKnob');
+  let joyVX = 0; // -1..1
   function press(code){ keys.add(code); }
   function release(code){ keys.delete(code); }
   if (isTouch) {
@@ -286,9 +302,43 @@
       el.addEventListener('mouseup', up);
       el.addEventListener('mouseleave', up);
     };
-    mapHold(btnL, 'KeyA');
-    mapHold(btnR, 'KeyD');
     mapHold(btnF, 'Space');
+
+    // Joystick logic
+    const joyRect = () => joy.getBoundingClientRect();
+    let joyActive = false;
+    function setKnob(x, y) {
+      const r = 56; // base radius
+      const dx = x; const dy = y;
+      const len = Math.hypot(dx, dy);
+      const cl = Math.min(len, r);
+      const nx = (len>0? dx/len : 0) * cl;
+      const ny = (len>0? dy/len : 0) * cl;
+      joyKnob.style.transform = `translate(${nx}px, ${ny}px)`;
+      const dead = 12;
+      joyVX = Math.abs(dx) < dead ? 0 : clamp(dx / r, -1, 1);
+    }
+    function resetKnob(){ joyKnob.style.transform = 'translate(0px,0px)'; joyVX = 0; }
+
+    const start = (e) => {
+      e.preventDefault();
+      initAudio(); if (audioCtx && audioCtx.state==='suspended') audioCtx.resume();
+      joyActive = true;
+      const rect = joyRect();
+      const t = ('changedTouches' in e) ? e.changedTouches[0] : e;
+      setKnob(t.clientX - (rect.left + rect.width/2), t.clientY - (rect.top + rect.height/2));
+    };
+    const move = (e) => {
+      if (!joyActive) return;
+      const rect = joyRect();
+      const t = ('changedTouches' in e) ? e.changedTouches[0] : e;
+      setKnob(t.clientX - (rect.left + rect.width/2), t.clientY - (rect.top + rect.height/2));
+    };
+    const end = (e) => { joyActive = false; resetKnob(); };
+
+    ['touchstart','pointerdown','mousedown'].forEach(ev => joy.addEventListener(ev, start, {passive:false}));
+    ['touchmove','pointermove','mousemove'].forEach(ev => joy.addEventListener(ev, move, {passive:false}));
+    ['touchend','touchcancel','pointerup','pointercancel','mouseup','mouseleave'].forEach(ev => joy.addEventListener(ev, end));
   }
 
   let running = false, paused = false;
@@ -297,6 +347,14 @@
   function toggleMute(){ muted = !muted; hud.muteBtn.textContent = muted? '🔈 Sound aus' : '🔊 Sound an'; }
   hud.muteBtn.addEventListener('click', toggleMute);
   hud.pauseBtn.addEventListener('click', togglePause);
+
+  let autoFire = false;
+  function toggleAutoFire(){
+    autoFire = !autoFire;
+    hud.autoFireBtn.classList.toggle('primary', autoFire);
+    hud.autoFireBtn.textContent = autoFire ? '🔁 Auto‑Fire an' : '🔁 Auto‑Fire aus';
+  }
+  hud.autoFireBtn.addEventListener('click', toggleAutoFire);
 
   const GAME = {
     mode: 'solo', // 'solo' | 'host' | 'client'
@@ -331,6 +389,22 @@
   function rectHit(ax, ay, aw, ah, bx, by, bw, bh){
     return Math.abs(ax - bx) * 2 < (aw + bw) && Math.abs(ay - by) * 2 < (ah + bh);
   }
+  // ======= Gamepad Support =======
+  let gpEnabled = false, gpLX = 0, gpFire = false;
+  function pollGamepad(){
+    const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+    const p = pads && pads[0];
+    if (p && p.connected) {
+      gpEnabled = true;
+      const ax = p.axes && p.axes.length ? p.axes[0] : 0;
+      gpLX = Math.abs(ax) > 0.15 ? ax : 0;
+      const btn = (i) => p.buttons && p.buttons[i] && p.buttons[i].pressed;
+      gpFire = !!(btn(0) || btn(1) || btn(7)); // A/B/RT
+      const pause = !!btn(9); // START/Options
+      if (pause && !pollGamepad._pauseLatch){ togglePause(); pollGamepad._pauseLatch = true; }
+      if (!pause) pollGamepad._pauseLatch = false;
+    } else { gpEnabled = false; gpLX = 0; gpFire = false; }
+  }
 
   function update(dt){
     if (paused) return;
@@ -338,9 +412,21 @@
     const speed = 240; // px/s
 
     // Input (local)
-    const left = keys.has('ArrowLeft') || keys.has('KeyA');
-    const right = keys.has('ArrowRight') || keys.has('KeyD');
-    const shoot = keys.has('Space') || keys.has(' ');
+    let left = keys.has('ArrowLeft') || keys.has('KeyA');
+    let right = keys.has('ArrowRight') || keys.has('KeyD');
+    let shoot = keys.has('Space') || keys.has(' ');
+
+    // Merge inputs from joystick and gamepad; apply auto-fire
+    if (typeof joyVX !== 'undefined') {
+      if (Math.abs(joyVX) > 0.15) { left = left || (joyVX < -0.15); right = right || (joyVX > 0.15); }
+    }
+    pollGamepad();
+    if (gpEnabled) {
+      if (gpLX < -0.15) left = true;
+      if (gpLX > 0.15) right = true;
+      shoot = shoot || gpFire;
+    }
+    if (autoFire) shoot = true;
 
     if (GAME.mode !== 'client') {
       // Only host/solo simulate world
