@@ -288,7 +288,14 @@
     mobile.hidden = false;
     document.body.style.overscrollBehavior = 'none';
     document.body.style.overflow = 'hidden';
-    ['touchstart','touchmove'].forEach(ev => document.addEventListener(ev, (e)=>{ if(e.target.closest('#wrap')) e.preventDefault(); }, {passive:false}));
+    ['touchstart','touchmove'].forEach(ev => document.addEventListener(ev, (e)=>{ 
+      const el = e.target;
+      // Nur Default unterdrücken, wenn die Geste auf Canvas/Joystick/Mobile-Controls stattfindet –
+      // damit Buttons/Links im Menü normal klickbar bleiben.
+      if (el.closest('#game') || el.closest('#mobile') || el.closest('.joystick')) {
+        e.preventDefault();
+      }
+    }, {passive:false}));
     const mapHold = (el, code) => {
       const down = (e)=>{ e.preventDefault(); initAudio(); if (audioCtx && audioCtx.state==='suspended') audioCtx.resume(); press(code); };
       const up = (e)=>{ e.preventDefault(); release(code); };
