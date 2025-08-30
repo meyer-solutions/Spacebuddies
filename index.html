@@ -65,11 +65,15 @@
     .joystick { position: relative; width: 140px; height: 140px; border-radius: 50%; }
     .joy-base { position:absolute; inset:0; border-radius:50%; background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.18); box-shadow: inset 0 0 50px rgba(0,0,0,.25); }
     .joy-knob { position:absolute; left:calc(50% - 24px); top:calc(50% - 24px); width:48px; height:48px; border-radius:50%; background:rgba(255,255,255,.16); border:1px solid rgba(255,255,255,.35); box-shadow:0 6px 20px rgba(0,0,0,.35); transition: transform .05s; }
+  
+    /* QuickStart floating button */
+    .quickstart { position:absolute; top: max(12px, env(safe-area-inset-top)); right: calc(12px + env(safe-area-inset-right)); z-index: 60; pointer-events:auto; }
   </style>
 </head>
 <body>
 <div id="wrap">
   <canvas id="game"></canvas>
+  <button id="quickStart" class="quickstart btn primary" title="Schnell starten">▶︎ Start</button>
 
   <div class="hud" id="hud" hidden>
     <div class="stat" id="score">Score: 0</div>
@@ -270,6 +274,7 @@
   const copyAnswer = document.getElementById('copyAnswer');
   const applyBtn = document.getElementById('applyBtn');
   const rtcStatus = document.getElementById('rtcStatus');
+  const quickStart = document.getElementById('quickStart');
 
   const keys = new Set();
   window.addEventListener('keydown', (e) => { if (["ArrowLeft","ArrowRight"," ","KeyA","KeyD","KeyM","KeyP","KeyF"].includes(e.code)) e.preventDefault(); keys.add(e.code); if(e.code==='KeyM') toggleMute(); if(e.code==='KeyP') togglePause(); if(e.code==='KeyF') toggleAutoFire(); });
@@ -651,12 +656,21 @@
   function startOnlineGameAfterConnect(){
     menu.hidden = true; hud.el.hidden = false; running = true; paused = false; initAudio();
     resetLevel();
+    quickStart.hidden = true;
   }
 
   // ======= Menu Buttons =======
   document.getElementById('startSolo').addEventListener('click', () => {
     GAME.mode = 'solo'; GAME.me = 0; hud.net.textContent = 'Offline';
     menu.hidden = true; hud.el.hidden = false; running = true; paused = false; initAudio(); resetLevel();
+    quickStart.hidden = true;
+  });
+
+  // Failsafe QuickStart: startet sofort Solo & blendet Menü aus
+  quickStart.addEventListener('click', () => {
+    GAME.mode = 'solo'; GAME.me = 0; hud.net.textContent = 'Offline';
+    menu.hidden = true; hud.el.hidden = false; running = true; paused = false; initAudio(); resetLevel();
+    quickStart.hidden = true;
   });
 
   document.getElementById('hostBtn').addEventListener('click', async () => {
