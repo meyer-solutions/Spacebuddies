@@ -1,0 +1,586 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>Space Buddies — Koop‑Invaders</title>
+  <style>
+    :root {
+      --bg: #0a0f1a;
+      --fg: #e0f2ff;
+      --accent: #49d0ff;
+      --accent2: #ff49b0;
+      --muted: #94a3b8;
+      --ok: #22c55e;
+      --warn: #f59e0b;
+      --err: #ef4444;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; background: radial-gradient(1200px 800px at 70% 20%, #0d1326, var(--bg)); color: var(--fg); font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Noto Sans, Ubuntu, Cantarell, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji"; }
+    #wrap { position: relative; width: 100%; height: 100%; overflow: hidden; }
+    canvas { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; }
+
+    /* HUD */
+    .hud { position: absolute; left: 0; right: 0; top: 0; display: flex; justify-content: space-between; align-items: center; padding: .6rem .9rem; pointer-events: none; text-shadow: 0 1px 0 rgba(0,0,0,.6);
+      font-weight: 700; letter-spacing: .03em; }
+    .hud .stat { opacity: .9; }
+    .hud .right { display:flex; gap: .8rem; }
+    .pill { pointer-events: auto; border: 1px solid rgba(255,255,255,.15); padding: .36rem .6rem; border-radius: 999px; background: rgba(255,255,255,.05); backdrop-filter: blur(4px); font-size: .9rem; }
+
+    /* Overlay UI */
+    .overlay { position: absolute; inset: 0; display: grid; place-items: center; background: linear-gradient(180deg, rgba(0,0,0,.35), rgba(0,0,0,.65)); }
+    .panel { width: min(940px, 92vw); max-height: 90vh; overflow:auto; border: 1px solid rgba(255,255,255,.12); border-radius: 16px; padding: 20px; background: rgba(6,10,19,.8); box-shadow: 0 20px 60px rgba(0,0,0,.35), inset 0 0 0 1px rgba(255,255,255,.05); }
+    h1 { margin: .2rem 0 1rem; font-size: clamp(1.6rem, 2.2rem, 3vw); letter-spacing: .02em; }
+    h2 { margin: 1.2rem 0 .5rem; font-size: 1.1rem; letter-spacing:.03em; opacity:.9 }
+    p, li { color: var(--muted); line-height: 1.5; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+    .card { border: 1px solid rgba(255,255,255,.12); border-radius: 14px; padding: 14px; background: rgba(255,255,255,.03); }
+    .row { display:flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+    .btn { appearance: none; border: 1px solid rgba(255,255,255,.2); border-radius: 12px; padding: .7rem 1rem; background: linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.05)); color: var(--fg); font-weight: 700; letter-spacing: .02em; cursor: pointer; transition: transform .06s ease, box-shadow .06s ease; }
+    .btn:hover { transform: translateY(-1px); box-shadow: 0 4px 18px rgba(73,208,255,.15); }
+    .btn.primary { border-color: rgba(73,208,255,.5); box-shadow: inset 0 0 24px rgba(73,208,255,.12); }
+    .btn.warn { border-color: rgba(245,158,11,.5); box-shadow: inset 0 0 24px rgba(245,158,11,.12); }
+    .btn.ghost { background: transparent; border-color: rgba(255,255,255,.15); }
+    .small { font-size: .9rem; opacity:.8 }
+    textarea, input[type="text"] { width: 100%; background: rgba(0,0,0,.35); color: var(--fg); border: 1px solid rgba(255,255,255,.18); border-radius: 10px; padding: .6rem .7rem; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    code.kbd { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.2); padding: .2rem .45rem; border-radius: 6px; }
+    .status { font-size: .95rem; opacity:.85 }
+    .status.ok { color: var(--ok) }
+    .status.warn { color: var(--warn) }
+    .status.err { color: var(--err) }
+
+    /* Tiny footer */
+    .foot { margin-top: 10px; opacity:.6; font-size: .9rem; }
+  
+    /* Mobile Controls */
+    .mobile { position:absolute; left:0; right:0; bottom:0; display:flex; justify-content:space-between; gap:12px; padding:12px calc(12px + env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) calc(12px + env(safe-area-inset-left)); pointer-events:none; }
+    .mobile .pad { flex:1; display:flex; gap:12px; }
+    .mobile button { pointer-events:auto; touch-action:none; -webkit-user-select:none; user-select:none; border:1px solid rgba(255,255,255,.2); border-radius:16px; background:rgba(255,255,255,.06); backdrop-filter: blur(6px); padding:16px; font-size:22px; min-width:64px; min-height:64px; }
+    .mobile .fire { flex:0 0 96px; min-height:96px; font-size:26px; border-color: rgba(73,208,255,.5); box-shadow: inset 0 0 24px rgba(73,208,255,.12); }
+    @media (min-width: 800px) { .mobile { display:none; } }
+  </style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="game"></canvas>
+
+  <div class="hud" id="hud" hidden>
+    <div class="stat" id="score">Score: 0</div>
+    <div class="right">
+      <div class="pill" id="lives">❤❤❤</div>
+      <div class="pill" id="net">Offline</div>
+      <button class="pill btn ghost" id="muteBtn" title="M">🔊 Sound an</button>
+      <button class="pill btn ghost" id="pauseBtn" title="P">⏸️ Pause</button>
+    </div>
+  </div>
+
+  <div class="mobile" id="mobile" hidden>
+    <div class="pad">
+      <button class="btn" id="btnLeft" aria-label="Links">⬅️</button>
+      <button class="btn" id="btnRight" aria-label="Rechts">➡️</button>
+    </div>
+    <button class="btn fire" id="btnFire" aria-label="Feuer">🔥</button>
+  </div>
+
+  <div class="overlay" id="menu">
+    <div class="panel">
+      <h1>🚀 Space Buddies — Koop‑Invaders</h1>
+      <p class="small">Ein kleines, pfeilschnelles Browser‑Game im Geiste von <em>Space Invaders</em>. Spiele allein, oder online im Koop über WebRTC (ohne Server – Copy&Paste Signaling).
+      </p>
+      <div class="grid">
+        <div class="card">
+          <h2>🎮 Steuerung</h2>
+          <ul>
+            <li><code class="kbd">←</code>/<code class="kbd">→</code> oder <code class="kbd">A</code>/<code class="kbd">D</code> bewegen</li>
+            <li><code class="kbd">Leertaste</code> schießen</li>
+            <li><code class="kbd">P</code> Pause · <code class="kbd">M</code> Mute</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h2>🕹️ Modus wählen</h2>
+          <div class="row">
+            <button class="btn primary" id="startSolo">Singleplayer starten</button>
+            <button class="btn" id="hostBtn">Online hosten</button>
+            <button class="btn" id="joinBtn">Online beitreten</button>
+          </div>
+          <p class="small">Im Koop gibt es zwei Schiffe. Host simuliert Gegner & Spielphysik; der Buddy sendet seine Eingaben.</p>
+        </div>
+        <div class="card" id="netUI" hidden>
+          <h2>🌐 Online (WebRTC, Copy&Paste)</h2>
+          <p id="netHelp" class="small"></p>
+          <div class="grid">
+            <div>
+              <h3 class="small">Schritt A</h3>
+              <textarea id="offer" rows="6" placeholder="Angebot / Offer hier erscheint (Host) oder einfügen (Join)"></textarea>
+              <div class="row" style="margin-top:6px;">
+                <button class="btn" id="copyOffer">In Zwischenablage</button>
+              </div>
+            </div>
+            <div>
+              <h3 class="small">Schritt B</h3>
+              <textarea id="answer" rows="6" placeholder="Antwort / Answer hier einfügen (Host) oder erscheint (Join)"></textarea>
+              <div class="row" style="margin-top:6px;">
+                <button class="btn" id="copyAnswer">In Zwischenablage</button>
+              </div>
+            </div>
+          </div>
+          <div class="row" style="margin-top:8px;">
+            <button class="btn primary" id="applyBtn">Apply / Verbinden</button>
+            <span id="rtcStatus" class="status">Status: bereit</span>
+          </div>
+          <p class="foot">Tipp: Teile die Textblöcke wie sie sind (JSON). Nach „Verbinden“ startet der Koop‑Modus.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  // ======= Utils =======
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const chance = p => Math.random() < p;
+
+  // ======= Audio =======
+  let audioCtx = null, masterGain = null, muted = false;
+  function initAudio() {
+    if (audioCtx) return;
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    masterGain = audioCtx.createGain();
+    masterGain.gain.value = 0.6;
+    masterGain.connect(audioCtx.destination);
+  }
+  function beep(freq=440, dur=0.08, type='square', vol=0.3) {
+    if (!audioCtx || muted) return;
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.type = type;
+    o.frequency.value = freq;
+    g.gain.value = vol;
+    o.connect(g).connect(masterGain);
+    const t = audioCtx.currentTime;
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    o.start(t);
+    o.stop(t + dur + 0.05);
+  }
+  const sfx = {
+    shoot(){ beep(880, 0.06, 'square', .25); },
+    explode(){ beep(120, 0.2, 'sawtooth', .35); },
+    hit(){ beep(300, 0.05, 'triangle', .25); },
+    fail(){ beep(100, 0.6, 'sawtooth', .3); },
+    bonus(){ beep(1320, 0.12, 'square', .25); },
+  };
+
+  // ======= Canvas / Render =======
+  const cvs = document.getElementById('game');
+  const ctx = cvs.getContext('2d');
+  const DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+  const BASE_W = 900, BASE_H = 600;
+  function resize() {
+    const w = cvs.clientWidth, h = cvs.clientHeight;
+    cvs.width = Math.floor(w * DPR);
+    cvs.height = Math.floor(h * DPR);
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  function clear() {
+    const g = ctx.createLinearGradient(0, 0, 0, cvs.height);
+    g.addColorStop(0, '#04070f');
+    g.addColorStop(1, '#0b1020');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, cvs.width, cvs.height);
+    // Stars
+    ctx.save();
+    ctx.globalAlpha = 0.5;
+    for (let i=0;i<80;i++) {
+      const x = (i*57 % cvs.width)/DPR;
+      const y = ((i*i*29)%cvs.height)/DPR;
+      ctx.fillStyle = i%9===0? '#49d0ff' : (i%13===0? '#ff49b0' : '#cbe5ff');
+      ctx.fillRect(x, y, 1.5, 1.5);
+    }
+    ctx.restore();
+  }
+
+  function drawShip(p, color) {
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.fillStyle = color;
+    // simple pixel ship
+    ctx.fillRect(-12, 0, 24, 6);
+    ctx.fillRect(-8, -6, 16, 6);
+    ctx.fillRect(-4, -12, 8, 6);
+    ctx.restore();
+  }
+  function drawAlien(a) {
+    ctx.save();
+    ctx.translate(a.x, a.y);
+    ctx.fillStyle = a.color;
+    // retro blob
+    ctx.fillRect(-10, -6, 20, 12);
+    ctx.clearRect(-6, -2, 4, 2);
+    ctx.clearRect(2, -2, 4, 2);
+    ctx.fillRect(-12, -2, 4, 4);
+    ctx.fillRect(8, -2, 4, 4);
+    ctx.restore();
+  }
+  function drawBullet(b, color) {
+    ctx.save();
+    ctx.fillStyle = color;
+    ctx.fillRect(b.x - 2, b.y - 8, 4, 10);
+    ctx.restore();
+  }
+
+  // ======= Game State =======
+  const hud = {
+    el: document.getElementById('hud'),
+    score: document.getElementById('score'),
+    lives: document.getElementById('lives'),
+    net: document.getElementById('net'),
+    muteBtn: document.getElementById('muteBtn'),
+    pauseBtn: document.getElementById('pauseBtn'),
+  };
+
+  const menu = document.getElementById('menu');
+  const netUI = document.getElementById('netUI');
+  const netHelp = document.getElementById('netHelp');
+  const offerTA = document.getElementById('offer');
+  const answerTA = document.getElementById('answer');
+  const copyOffer = document.getElementById('copyOffer');
+  const copyAnswer = document.getElementById('copyAnswer');
+  const applyBtn = document.getElementById('applyBtn');
+  const rtcStatus = document.getElementById('rtcStatus');
+
+  const keys = new Set();
+  window.addEventListener('keydown', (e) => { if (["ArrowLeft","ArrowRight"," ","KeyA","KeyD","KeyM","KeyP"].includes(e.code)) e.preventDefault(); keys.add(e.code); if(e.code==='KeyM') toggleMute(); if(e.code==='KeyP') togglePause(); });
+  window.addEventListener('keyup', (e) => keys.delete(e.code));
+
+  // ======= Mobile / Touch Controls =======
+  const isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints>0);
+  const mobile = document.getElementById('mobile');
+  const btnL = document.getElementById('btnLeft');
+  const btnR = document.getElementById('btnRight');
+  const btnF = document.getElementById('btnFire');
+  function press(code){ keys.add(code); }
+  function release(code){ keys.delete(code); }
+  if (isTouch) {
+    mobile.hidden = false;
+    document.body.style.overscrollBehavior = 'none';
+    document.body.style.overflow = 'hidden';
+    ['touchstart','touchmove'].forEach(ev => document.addEventListener(ev, (e)=>{ if(e.target.closest('#wrap')) e.preventDefault(); }, {passive:false}));
+    const mapHold = (el, code) => {
+      const down = (e)=>{ e.preventDefault(); initAudio(); if (audioCtx && audioCtx.state==='suspended') audioCtx.resume(); press(code); };
+      const up = (e)=>{ e.preventDefault(); release(code); };
+      el.addEventListener('touchstart', down, {passive:false});
+      el.addEventListener('touchend', up);
+      el.addEventListener('touchcancel', up);
+      el.addEventListener('pointerdown', down);
+      el.addEventListener('pointerup', up);
+      el.addEventListener('pointercancel', up);
+      el.addEventListener('mousedown', down);
+      el.addEventListener('mouseup', up);
+      el.addEventListener('mouseleave', up);
+    };
+    mapHold(btnL, 'KeyA');
+    mapHold(btnR, 'KeyD');
+    mapHold(btnF, 'Space');
+  }
+
+  let running = false, paused = false;
+  function togglePause(){ if(!running) return; paused = !paused; hud.pauseBtn.textContent = paused? '▶️ Weiter' : '⏸️ Pause'; }
+
+  function toggleMute(){ muted = !muted; hud.muteBtn.textContent = muted? '🔈 Sound aus' : '🔊 Sound an'; }
+  hud.muteBtn.addEventListener('click', toggleMute);
+  hud.pauseBtn.addEventListener('click', togglePause);
+
+  const GAME = {
+    mode: 'solo', // 'solo' | 'host' | 'client'
+    me: 0, // my player index 0/1
+    score: 0,
+    lives: [3,3],
+    players: [ {x: 450, y: 550, vx:0, fireCd:0}, {x: 350, y: 550, vx:0, fireCd:0} ],
+    pBullets: [], // {x,y,v}
+    aBullets: [],
+    aliens: [], // {x,y,alive}
+    alienDir: 1,
+    alienStep: 20,
+    alienSpeed: 30, // px/s horizontally
+    alienDrop: 12,
+    width: BASE_W,
+    height: BASE_H,
+    over: false,
+  };
+
+  function resetLevel() {
+    GAME.pBullets.length = 0; GAME.aBullets.length = 0; GAME.aliens.length = 0;
+    const rows = 5, cols = 10; const offX = 80, offY = 80, gapX = 60, gapY = 40;
+    for (let r=0;r<rows;r++){
+      for (let c=0;c<cols;c++){
+        GAME.aliens.push({ x: offX + c*gapX, y: offY + r*gapY, alive:true, color: r%2? '#49d0ff' : '#ff49b0' });
+      }
+    }
+    GAME.alienDir = 1; GAME.alienSpeed = 30; GAME.alienStep = 20; GAME.over = false;
+  }
+
+  // ======= Physics =======
+  function rectHit(ax, ay, aw, ah, bx, by, bw, bh){
+    return Math.abs(ax - bx) * 2 < (aw + bw) && Math.abs(ay - by) * 2 < (ah + bh);
+  }
+
+  function update(dt){
+    if (paused) return;
+    const me = GAME.players[GAME.me];
+    const speed = 240; // px/s
+
+    // Input (local)
+    const left = keys.has('ArrowLeft') || keys.has('KeyA');
+    const right = keys.has('ArrowRight') || keys.has('KeyD');
+    const shoot = keys.has('Space') || keys.has(' ');
+
+    if (GAME.mode !== 'client') {
+      // Only host/solo simulate world
+      for (let i=0;i<GAME.players.length;i++){
+        const p = GAME.players[i];
+        // If remote client, their vx has been set via net input
+        if (i === GAME.me) p.vx = (right ? 1 : 0) - (left ? 1 : 0);
+        p.x += p.vx * speed * dt;
+        p.x = clamp(p.x, 20, GAME.width - 20);
+        p.fireCd -= dt;
+        if (i===GAME.me && shoot && p.fireCd <= 0){
+          GAME.pBullets.push({x:p.x, y:p.y-16, v:-460, owner:i}); p.fireCd = 0.25; sfx.shoot();
+        }
+      }
+
+      // Aliens move as a block
+      let minX=9999, maxX=-9999;
+      for (const a of GAME.aliens){ if(!a.alive) continue; minX = Math.min(minX, a.x); maxX = Math.max(maxX, a.x); }
+      if (minX<50 && GAME.alienDir<0 || maxX>GAME.width-50 && GAME.alienDir>0) {
+        GAME.alienDir *= -1; for (const a of GAME.aliens){ if(a.alive) a.y += GAME.alienDrop; }
+        GAME.alienSpeed *= 1.08;
+      }
+      for (const a of GAME.aliens){ if(a.alive) a.x += GAME.alienDir * GAME.alienSpeed * dt; }
+
+      // Random alien shots
+      if (chance(0.02)){
+        const alive = GAME.aliens.filter(a=>a.alive);
+        if (alive.length){ const a = alive[(Math.random()*alive.length)|0]; GAME.aBullets.push({x:a.x, y:a.y+10, v: 240}); }
+      }
+
+      // Bullets
+      for (const b of GAME.pBullets){ b.y += b.v * dt; }
+      for (const b of GAME.aBullets){ b.y += b.v * dt; }
+      GAME.pBullets = GAME.pBullets.filter(b=> b.y>-30 && b.y<GAME.height+30);
+      GAME.aBullets = GAME.aBullets.filter(b=> b.y>-30 && b.y<GAME.height+30);
+
+      // Collisions: player bullets vs aliens
+      for (const b of GAME.pBullets){
+        for (const a of GAME.aliens){ if(!a.alive) continue; if (rectHit(b.x,b.y,6,10, a.x,a.y,20,12)) { a.alive=false; b.y=-9999; GAME.score += 10; sfx.explode(); break; } }
+      }
+      // Collisions: alien bullets vs players
+      for (const b of GAME.aBullets){
+        for (let i=0;i<GAME.players.length;i++){
+          const p = GAME.players[i];
+          if (rectHit(b.x,b.y,6,10, p.x,p.y,24,12)) { b.y=9999; if (GAME.lives[i]>0){ GAME.lives[i]--; sfx.hit(); if (GAME.lives[i]===0) sfx.fail(); } }
+        }
+      }
+
+      // Lose if any alien reaches bottom
+      for (const a of GAME.aliens){ if(a.alive && a.y > GAME.height-80){ GAME.over = true; sfx.fail(); break; } }
+
+      // Win condition
+      if (GAME.aliens.every(a=>!a.alive)) { GAME.score += 100; sfx.bonus(); resetLevel(); }
+
+      // HUD update (host/solo authoritative)
+      hud.score.textContent = `Score: ${GAME.score}`;
+      const meLives = '❤'.repeat(Math.max(0,GAME.lives[GAME.me])) + '🖤'.repeat(Math.max(0,3-GAME.lives[GAME.me]));
+      hud.lives.textContent = meLives;
+
+      // Broadcast state if online host
+      if (GAME.mode === 'host' && net.channel && net.channel.readyState === 'open') {
+        const state = {
+          t: 'state',
+          s: GAME.score,
+          l: GAME.lives,
+          p: GAME.players.map(p=>({x:Math.round(p.x*10)/10, y:p.y, cd:Math.round(p.fireCd*100)/100})),
+          pb: GAME.pBullets.map(b=>({x:Math.round(b.x), y:Math.round(b.y)})),
+          ab: GAME.aBullets.map(b=>({x:Math.round(b.x), y:Math.round(b.y)})),
+          a: GAME.aliens.map(a=>({x:Math.round(a.x), y:Math.round(a.y), alive:a.alive})),
+          over: GAME.over
+        };
+        try { net.channel.send(JSON.stringify(state)); } catch {}
+      }
+    } else {
+      // client: simulate only local input velocity, shooting request sent to host
+      const p = GAME.players[GAME.me];
+      p.vx = (right ? 1 : 0) - (left ? 1 : 0);
+      // send input diff throttled
+      net.inputAccum.left = left; net.inputAccum.right = right; net.inputAccum.shoot = shoot;
+      const now = performance.now();
+      if (now - net.lastInputSent > 33 && net.channel && net.channel.readyState === 'open') {
+        try { net.channel.send(JSON.stringify({t:'input', v:{lx:left, rx:right, sh:shoot}})); net.lastInputSent = now; } catch {}
+      }
+    }
+  }
+
+  function render(){
+    clear();
+    // letterbox to BASE_W x BASE_H
+    const scaleX = cvs.clientWidth / BASE_W; const scaleY = cvs.clientHeight / BASE_H; const s = Math.min(scaleX, scaleY);
+    const ox = (cvs.clientWidth - BASE_W * s) / 2; const oy = (cvs.clientHeight - BASE_H * s) / 2;
+    ctx.save();
+    ctx.translate(ox, oy); ctx.scale(s, s);
+
+    // ground
+    ctx.fillStyle = 'rgba(73,208,255,.15)';
+    ctx.fillRect(0, BASE_H-30, BASE_W, 2);
+
+    // entities
+    for (const a of GAME.aliens){ if(a.alive) drawAlien(a); }
+    for (const b of GAME.pBullets){ drawBullet(b, '#e2f1ff'); }
+    for (const b of GAME.aBullets){ drawBullet(b, '#ffd8ef'); }
+
+    drawShip(GAME.players[0], '#49d0ff');
+    drawShip(GAME.players[1], '#ff7acc');
+
+    if (GAME.over) {
+      ctx.fillStyle = 'rgba(0,0,0,.5)'; ctx.fillRect(0,0,BASE_W,BASE_H);
+      ctx.fillStyle = '#fff'; ctx.font = '28px ui-sans-serif'; ctx.textAlign='center';
+      ctx.fillText('GAME OVER – drücke Leertaste für Neustart', BASE_W/2, BASE_H/2);
+    }
+
+    ctx.restore();
+  }
+
+  // ======= Game Loop =======
+  let last = performance.now();
+  function loop(){
+    const now = performance.now();
+    const dt = Math.min(0.033, (now - last)/1000);
+    last = now;
+    if (running) update(dt);
+    render();
+    requestAnimationFrame(loop);
+  }
+  loop();
+
+  // ======= Networking (WebRTC P2P, manual signaling) =======
+  const net = {
+    pc: null,
+    channel: null,
+    isHost: false,
+    lastInputSent: 0,
+    inputAccum: {left:false,right:false,shoot:false},
+  };
+
+  function setNetStatus(text, cls=''){
+    rtcStatus.className = 'status ' + cls; rtcStatus.textContent = 'Status: ' + text; hud.net.textContent = (text.includes('verbunden')||text.includes('connected'))? 'Online' : 'Offline';
+  }
+
+  async function createPeer(host){
+    net.pc = new RTCPeerConnection({
+      iceServers: [{urls: ['stun:stun.l.google.com:19302','stun:global.stun.twilio.com:3478']}]
+    });
+    net.isHost = host;
+
+    net.pc.onicecandidate = (e) => {
+      if (e.candidate) return; // wait for gathering complete
+      if (host) offerTA.value = JSON.stringify(net.pc.localDescription);
+      else answerTA.value = JSON.stringify(net.pc.localDescription);
+    };
+
+    if (host) {
+      net.channel = net.pc.createDataChannel('game', { ordered: true });
+      wireChannel();
+      const offer = await net.pc.createOffer();
+      await net.pc.setLocalDescription(offer);
+      setNetStatus('Offer erstellt – teile A, warte auf Answer…', 'warn');
+    } else {
+      net.pc.ondatachannel = (ev) => { net.channel = ev.channel; wireChannel(); };
+    }
+
+    net.pc.onconnectionstatechange = () => {
+      if (!net.pc) return; const s = net.pc.connectionState;
+      if (s==='connected') { setNetStatus('verbunden', 'ok'); startOnlineGameAfterConnect(); }
+      else if (s==='failed') setNetStatus('fehlgeschlagen', 'err');
+      else setNetStatus(s, '');
+    };
+  }
+
+  function wireChannel(){
+    if (!net.channel) return;
+    net.channel.onopen = () => { setNetStatus('verbunden', 'ok'); };
+    net.channel.onmessage = (ev) => {
+      try {
+        const msg = JSON.parse(ev.data);
+        if (msg.t === 'state' && GAME.mode==='client') {
+          // apply state snapshot
+          GAME.score = msg.s; GAME.lives = msg.l; GAME.over = msg.over;
+          GAME.players.forEach((p,i)=>{ p.x = msg.p[i].x; p.y = msg.p[i].y; p.fireCd = msg.p[i].cd; });
+          GAME.pBullets = msg.pb.map(o=>({x:o.x,y:o.y,v:-460}));
+          GAME.aBullets = msg.ab.map(o=>({x:o.x,y:o.y,v:240}));
+          if (GAME.aliens.length !== msg.a.length) GAME.aliens = msg.a.map(a=>({...a, color: '#49d0ff'}));
+          else GAME.aliens.forEach((a,i)=>{ a.x=msg.a[i].x; a.y=msg.a[i].y; a.alive=msg.a[i].alive; });
+        } else if (msg.t === 'input' && GAME.mode==='host') {
+          // apply remote input to player 1 (guest)
+          const v = msg.v; const p = GAME.players[1]; p.vx = (v.rx?1:0) - (v.lx?1:0);
+          if (v.sh && p.fireCd <= 0){ GAME.pBullets.push({x:p.x, y:p.y-16, v:-460, owner:1}); p.fireCd = 0.25; sfx.shoot(); }
+        }
+      } catch {}
+    };
+  }
+
+  // Host applies remote answer; Client applies host offer
+  applyBtn.addEventListener('click', async () => {
+    try {
+      if (!net.pc) throw new Error('Peer nicht initialisiert');
+      if (net.isHost) {
+        const ans = JSON.parse(answerTA.value.trim());
+        await net.pc.setRemoteDescription(ans);
+        setNetStatus('Answer angewendet, verbinde…', 'warn');
+      } else {
+        const off = JSON.parse(offerTA.value.trim());
+        await net.pc.setRemoteDescription(off);
+        const answer = await net.pc.createAnswer();
+        await net.pc.setLocalDescription(answer);
+        setNetStatus('Answer erstellt – teile B', 'warn');
+      }
+    } catch (e) { setNetStatus('Fehler: '+e.message, 'err'); }
+  });
+
+  copyOffer.addEventListener('click', () => { offerTA.select(); document.execCommand('copy'); });
+  copyAnswer.addEventListener('click', () => { answerTA.select(); document.execCommand('copy'); });
+
+  function startOnlineGameAfterConnect(){
+    menu.hidden = true; hud.el.hidden = false; running = true; paused = false; initAudio();
+    resetLevel();
+  }
+
+  // ======= Menu Buttons =======
+  document.getElementById('startSolo').addEventListener('click', () => {
+    GAME.mode = 'solo'; GAME.me = 0; hud.net.textContent = 'Offline';
+    menu.hidden = true; hud.el.hidden = false; running = true; paused = false; initAudio(); resetLevel();
+  });
+
+  document.getElementById('hostBtn').addEventListener('click', async () => {
+    GAME.mode = 'host'; GAME.me = 0; hud.net.textContent = 'Hosting';
+    netUI.hidden = false; netHelp.innerHTML = 'Du bist <b>Host</b>. 1) Klicke unten auf <em>Verbinden</em>, um ein Offer zu erzeugen. 2) Sende <em>Schritt A</em> an deinen Buddy. 3) Füge seine <em>Antwort</em> in Schritt B ein und klicke erneut <em>Verbinden</em>.';
+    await createPeer(true);
+  });
+
+  document.getElementById('joinBtn').addEventListener('click', async () => {
+    GAME.mode = 'client'; GAME.me = 1; hud.net.textContent = 'Joining…';
+    netUI.hidden = false; netHelp.innerHTML = 'Du trittst bei. 1) Füge das <em>Offer</em> deines Hosts in <em>Schritt A</em> ein. 2) Klicke <em>Verbinden</em>, dann erscheint in <em>Schritt B</em> deine <em>Answer</em>. 3) Diese schickst du dem Host.';
+    await createPeer(false);
+  });
+
+  // Restart on space if over
+  window.addEventListener('keydown', (e) => { if (e.code==='Space' && GAME.over && running) { resetLevel(); } });
+})();
+</script>
+</body>
+</html>
